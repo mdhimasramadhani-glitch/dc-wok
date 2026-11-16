@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PulseCord — Friendly Discord Automation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'], display: ['"Nunito"', 'sans-serif'], }, colors: { brand: { 50: '#f0fdfa', 100: '#ccfbf1', 500: '#14b8a6', 600: '#0d9488', 700: '#0f766e' } } } }
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-teal-500 selection:text-white" x-data="dashboardApp()" x-init="initApp()">
+
+    <div class="flex h-screen overflow-hidden">
+        <!-- FIXED DARK SIDEBAR -->
+        <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 shadow-xl z-20">
+            <div>
+                <div class="h-20 flex items-center px-6 border-b border-slate-800/80">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-500 to-blue-500 flex items-center justify-center text-white font-display font-extrabold text-xl shadow-lg shadow-teal-500/20">P</div>
+                    <div class="ml-3">
+                        <span class="font-display font-bold text-lg text-white tracking-tight block leading-none">PulseCord</span>
+                        <span class="text-xs text-teal-400 font-medium">Smart Scheduler</span>
+                    </div>
+                </div>
+                <nav class="p-4 space-y-1.5">
+                    <button @click="activeTab = 'dashboard'" :class="activeTab === 'dashboard' ? 'bg-gradient-to-r from-teal-600/20 to-blue-600/10 text-teal-400 border-l-4 border-teal-400 font-semibold' : 'hover:bg-slate-800/60 hover:text-white'" class="w-full flex items-center px-4 py-3 rounded-xl transition-all duration-150 text-sm">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg> Accounts
+                    </button>
+                    <button @click="openAutoSender()" :class="activeTab === 'autosender' ? 'bg-gradient-to-r from-teal-600/20 to-blue-600/10 text-teal-400 border-l-4 border-teal-400 font-semibold' : 'hover:bg-slate-800/60 hover:text-white'" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-150 text-sm" :disabled="!selectedAccount" x-bind:class="!selectedAccount ? 'opacity-50 cursor-not-allowed' : ''">
+                        <div class="flex items-center"><svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg> Auto-Sender</div>
+                        <span x-show="runningChannelsCount() > 0 && activeTab === 'autosender'" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                    </button>
+                    <button @click="openLogsTab()" :class="activeTab === 'logs' ? 'bg-gradient-to-r from-teal-600/20 to-blue-600/10 text-teal-400 border-l-4 border-teal-400 font-semibold' : 'hover:bg-slate-800/60 hover:text-white'" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-150 text-sm">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <span>CD & Activity Logs</span>
+                        </div>
+                        <span x-show="accounts.some(a => a.worker_status === 'Running')" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-500/20 text-teal-300" x-text="accounts.filter(a => a.worker_status === 'Running').length"></span>
+                    </button>
+                </nav>
+            </div>
+            
+            <!-- Bottom Account Card in Sidebar -->
+            <div class="p-4 border-t border-slate-800/80">
+                <template x-if="selectedAccount">
+                    <div @click="activeTab = 'dashboard'" class="bg-slate-800/70 hover:bg-slate-800 cursor-pointer rounded-2xl p-3.5 flex items-center justify-between transition border border-slate-700/50">
+                        <div class="flex items-center space-x-3 overflow-hidden">
+                            <img :src="selectedAccount.avatar_url" class="w-10 h-10 rounded-full ring-2 ring-teal-500/40" alt="Avatar">
+                            <div class="truncate">
+                                <p class="text-[10px] uppercase font-bold tracking-wider text-teal-400">Active Account</p>
+                                <p class="text-sm font-semibold text-white truncate" x-text="selectedAccount.username"></p>
+                            </div>
+                        </div>
+                        <button title="Switch Account" class="text-slate-400 hover:text-white p-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                        </button>
+                    </div>
+                </template>
+                <template x-if="!selectedAccount">
+                    <button @click="openAuthModal()" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white font-semibold text-sm shadow-lg shadow-teal-500/20 flex items-center justify-center space-x-2 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+                        <span>Connect Account</span>
+                    </button>
+                </template>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="flex-1 flex flex-col overflow-y-auto custom-scroll">
+            <!-- Top Header -->
+            <header class="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/80 px-8 flex items-center justify-between sticky top-0 z-10">
+                <div>
+                    <h1 class="font-display font-bold text-2xl text-slate-800">Welcome back! 👋</h1>
+                    <p class="text-sm text-slate-500" x-show="activeTab === 'autosender'" x-text="runningChannelsCount() > 0 ? `${runningChannelsCount()} dari ${config.channels.length} channel sedang aktif berjalan.` : 'Semua channel sedang Paused. Klik Start pada channel yang sudah siap.'"></p>
+                    <p class="text-sm text-slate-500" x-show="activeTab === 'logs'">Pantau sisa Cooldown (CD) tiap channel & riwayat pengiriman per akun.</p>
+                    <p class="text-sm text-slate-500" x-show="activeTab === 'dashboard'">Manage your connected Discord accounts here.</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button x-show="activeTab === 'autosender' && runningChannelsCount() > 0"
+                            type="button" @click="stopAllChannels()"
+                            class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold transition">
+                        Pause Semua Channel
+                    </button>
+                    <button @click="openAuthModal()" class="px-4 py-2 rounded-xl border border-slate-200 hover:border-slate-300 bg-white text-slate-700 text-sm font-semibold flex items-center space-x-2 shadow-sm transition">
+                        <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+                        <span>Add Account</span>
+                    </button>
+                </div>
+            </header>
+
+            <div class="p-8 space-y-8 max-w-7xl w-full mx-auto">
+                
+                <!-- TAB 1: ACCOUNT INVENTORY -->
+                <div x-show="activeTab === 'dashboard'" x-transition.opacity class="space-y-6">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-xl font-bold text-slate-800">Connected Accounts</h2>
+                        <span class="text-sm font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full" x-text="`${accounts.length} Total`"></span>
+                    </div>
+                    
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead class="text-xs text-slate-400 uppercase bg-slate-50/50 border-b border-slate-100">
+                                <tr>
+                                    <th class="px-6 py-4 font-semibold tracking-wider">Discord Account</th>
+                                    <th class="px-6 py-4 font-semibold tracking-wider text-center">Status</th>
+                                    <th class="px-6 py-4 font-semibold tracking-wider text-center">CD Terdekat</th>
+                                    <th class="px-6 py-4 font-semibold tracking-wider text-center">Channel Aktif</th>
+                                    <th class="px-6 py-4 font-semibold tracking-wider text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <template x-if="accounts.length === 0">
+                                    <tr><td colspan="5" class="px-6 py-12 text-center text-slate-400 font-medium">Belum ada akun yang terhubung. Klik "Add Account" di kanan atas.</td></tr>
+                                </template>
+                                <template x-for="acc in accounts" :key="acc.id">
+                                    <tr class="hover:bg-slate-50/80 transition" :class="selectedAccount && selectedAccount.id === acc.id ? 'bg-teal-50/30' : ''">
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center space-x-3">
+                                                <img :src="acc.avatar_url" class="w-9 h-9 rounded-full ring-2 ring-slate-100">
+                                                <div>
+                                                    <span class="font-bold text-slate-800 block" x-text="acc.username"></span>
+                                                    <span class="text-[10px] uppercase font-bold text-slate-400" x-text="`ID: ${acc.id}`"></span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 text-center">
+                                            <span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold" :class="acc.worker_status === 'Running' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'">
+                                                <span class="w-1.5 h-1.5 rounded-full" :class="acc.worker_status === 'Running' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
+                                                <span x-text="acc.worker_status"></span>
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-center">
+                                            <span class="font-mono text-xs font-bold px-2.5 py-1 rounded-lg"
+                                                  :class="acc.worker_status === 'Running' && acc.remaining_seconds > 0 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-500'"
+                                                  x-text="formatAccountCD(acc)"></span>
+                                        </td>
+                                        <td class="px-6 py-4 text-center">
+                                            <span class="text-slate-800 font-bold bg-slate-100 px-2.5 py-1 rounded-md" x-text="`${acc.running_count || 0} / ${acc.targets_count}`"></span>
+                                        </td>
+                                        <td class="px-6 py-4 text-right space-x-2">
+                                            <button @click="configureAccount(acc)" class="px-4 py-2 rounded-xl bg-teal-50 text-teal-600 hover:bg-teal-100 font-bold text-xs transition">Configure</button>
+                                            <button @click="deleteAccount(acc.id)" class="px-4 py-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-xs transition">Delete</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB 2: AUTO-SENDER -->
+                <div x-show="activeTab === 'autosender'" x-cloak x-transition.opacity class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <div class="lg:col-span-7 space-y-6">
+                        <!-- TARGET SELECTOR -->
+                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm">
+                            <div class="p-5 bg-slate-900 text-white rounded-t-2xl flex flex-wrap items-center justify-between gap-4">
+                                <div class="flex items-center space-x-3.5">
+                                    <div class="relative">
+                                        <img :src="selectedAccount?.avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png'" class="w-11 h-11 rounded-full ring-2 ring-teal-400" alt="Avatar">
+                                        <span class="bottom-0 right-0 absolute w-3 h-3 bg-emerald-400 border-2 border-slate-900 rounded-full"></span>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <span class="font-display font-bold text-base" x-text="selectedAccount?.username || 'Not Connected'"></span>
+                                        </div>
+                                        <p class="text-xs text-slate-400">Channel baru otomatis Paused sampai kamu klik Start</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-3">
+                                    <button @click="fetchGuilds(selectedAccount?.id)" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center space-x-1.5 text-xs font-semibold">
+                                        <svg :class="{'animate-spin': isFetchingGuilds}" class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                        <span>Sync</span>
+                                    </button>
+                                    <div class="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-500/20 text-teal-300 border border-teal-400/30">
+                                        <span x-text="`${config.channels.length} / ${maxTargets} Targets`"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="p-6 space-y-5">
+                                <!-- 1. CHOOSE DISCORD SERVER -->
+                                <div class="relative" @click.away="guildDropdownOpen = false">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-500">1. Choose Discord Server</label>
+                                        <span class="text-xs text-slate-400" x-text="`${guilds.length} servers joined`"></span>
+                                    </div>
+                                    <button type="button" @click="guildDropdownOpen = !guildDropdownOpen" class="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-left text-sm font-medium text-slate-800 transition">
+                                        <span x-text="selectedGuild ? selectedGuild.name : 'Select a joined Discord server...'"></span>
+                                        <svg :class="{'rotate-180': guildDropdownOpen}" class="w-4 h-4 text-slate-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                    </button>
+                                    <div x-show="guildDropdownOpen" x-transition class="absolute z-40 mt-2 w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+                                        <div class="p-2.5 border-b border-slate-100">
+                                            <input type="text" x-model="guildSearch" placeholder="Search server name..." class="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500">
+                                        </div>
+                                        <div class="max-h-60 overflow-y-auto custom-scroll divide-y divide-slate-50">
+                                            <template x-for="guild in filteredGuilds()" :key="guild.id">
+                                                <button type="button" @click="selectGuild(guild)" class="w-full px-4 py-2.5 text-left hover:bg-teal-50/70 flex items-center justify-between transition" :class="selectedGuild && selectedGuild.id === guild.id ? 'bg-teal-50 text-teal-700' : ''">
+                                                    <span class="text-sm font-semibold" x-text="guild.name"></span>
+                                                    <span class="text-xs font-mono text-slate-400" x-text="guild.id"></span>
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 2. TICK TARGET CHANNELS -->
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-500">2. Tick Target Channels</label>
+                                    </div>
+
+                                    <div class="relative mb-2.5">
+                                        <input type="text" x-model="channelSearch" placeholder="Filter #channel name..." class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-teal-500 focus:bg-white transition">
+                                    </div>
+
+                                    <div class="max-h-48 overflow-y-auto custom-scroll border border-slate-200 rounded-xl bg-slate-50/50">
+                                        <template x-if="isFetchingChannels">
+                                            <div class="p-6 text-center text-xs text-slate-500">Mengambil daftar channel...</div>
+                                        </template>
+                                        <template x-if="!isFetchingChannels && filteredChannels().length === 0">
+                                            <div class="p-5 text-center text-xs text-slate-500 space-y-1">
+                                                <p class="font-semibold text-slate-700">Daftar channel dibatasi atau kosong.</p>
+                                                <p>Masukkan <b>Channel ID</b> secara manual di bawah.</p>
+                                            </div>
+                                        </template>
+                                        <template x-for="ch in filteredChannels()" :key="ch.id">
+                                            <label class="flex items-center justify-between px-4 py-3 hover:bg-white cursor-pointer select-none border-b border-slate-100 last:border-b-0">
+                                                <div class="flex items-center space-x-3">
+                                                    <input type="checkbox" :checked="isChannelSelected(ch.id)" @change="toggleChannel(ch)" :disabled="!isChannelSelected(ch.id) && config.channels.length >= maxTargets" class="w-4 h-4 rounded text-teal-600 border-slate-300">
+                                                    <span class="text-sm font-semibold text-slate-800" x-text="`#${ch.name}`"></span>
+                                                </div>
+                                            </label>
+                                        </template>
+                                    </div>
+
+                                    <!-- Add Channel ID Manual -->
+                                    <div class="mt-3 flex items-center space-x-2">
+                                        <input type="text" x-model="manualChannelId" @keydown.enter.prevent="addManualChannel()" placeholder="Paste Channel ID..." class="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-teal-500 focus:bg-white">
+                                        <button type="button" @click="addManualChannel()" :disabled="isAddingChannel" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition shrink-0">
+                                            <span x-text="isAddingChannel ? 'Checking...' : '+ Add ID'"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. KARTU PESAN, COOLDOWN & START/PAUSE TERPISAH PER CHANNEL -->
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-display font-bold text-lg text-slate-800">3. Pengaturan & Kontrol Per Channel</h3>
+                                <span class="text-xs font-semibold text-slate-500" x-text="`${runningChannelsCount()} aktif / ${config.channels.length} total`"></span>
+                            </div>
+
+                            <template x-if="config.channels.length === 0">
+                                <div class="bg-white p-8 rounded-2xl border border-dashed border-slate-300 text-center text-xs text-slate-500 space-y-1">
+                                    <p class="font-bold text-slate-700 text-sm">Belum ada target channel dipilih</p>
+                                    <p>Centang channel di atas atau tempel <b>Channel ID</b> untuk mengatur pesan dan durasi CD masing-masing.</p>
+                                </div>
+                            </template>
+
+                            <template x-for="(ch, index) in config.channels" :key="ch.id">
+                                <div class="bg-white p-5 rounded-2xl border shadow-sm space-y-4 transition"
+                                     :class="ch.status === 'Running' ? 'border-emerald-300/90' : 'border-slate-200/90'">
+                                    <!-- Header Kartu Channel -->
+                                    <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                                        <div class="flex items-center space-x-2 overflow-hidden">
+                                            <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-teal-400 font-bold text-xs truncate" x-text="ch.guild_name || 'Discord Server'"></span>
+                                            <span class="font-display font-bold text-sm text-slate-800 truncate" x-text="`#${ch.name}`"></span>
+                                        </div>
+                                        <div class="flex items-center space-x-2">
+                                            <!-- Status & Live CD Channel ini -->
+                                            <span class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg font-mono text-[11px] font-bold"
+                                                  :class="ch.status === 'Running'
+                                                    ? (ch.remaining_seconds > 0 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')
+                                                    : 'bg-slate-100 text-slate-500'">
+                                                <span class="w-1.5 h-1.5 rounded-full" :class="ch.status === 'Running' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
+                                                <span x-text="ch.status === 'Running' ? (ch.remaining_seconds > 0 ? `CD: ${formatSeconds(ch.remaining_seconds)}` : 'Running') : 'Paused'"></span>
+                                            </span>
+                                            <button type="button" @click="toggleChannel(ch)" title="Hapus target ini" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Textarea Pesan & Preset CD 10m s/d 6j -->
+                                    <div>
+                                        <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                                            <label class="text-xs font-semibold text-slate-600">Isi Pesan untuk <span class="text-teal-600 font-bold" x-text="`#${ch.name}`"></span></label>
+                                            <div class="flex flex-wrap items-center gap-1">
+                                                <button type="button" @click="applyChannelDelayPreset(ch, 605, 625)" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition">10 Menit</button>
+                                                <button type="button" @click="applyChannelDelayPreset(ch, 1205, 1225)" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition">20 Menit</button>
+                                                <button type="button" @click="applyChannelDelayPreset(ch, 1805, 1830)" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition">30 Menit</button>
+                                                <button type="button" @click="applyChannelDelayPreset(ch, 3605, 3630)" class="px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[11px] font-semibold transition">1 Jam</button>
+                                                <button type="button" @click="applyChannelDelayPreset(ch, 7205, 7235)" class="px-2 py-0.5 rounded bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-[11px] font-semibold transition">2 Jam</button>
+                                                <button type="button" @click="applyChannelDelayPreset(ch, 10805, 10835)" class="px-2 py-0.5 rounded bg-cyan-50 hover:bg-cyan-100 text-cyan-700 border border-cyan-200 text-[11px] font-semibold transition">3 Jam</button>
+                                                <button type="button" @click="applyChannelDelayPreset(ch, 14405, 14440)" class="px-2 py-0.5 rounded bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-[11px] font-semibold transition">4 Jam</button>
+                                                <button type="button" @click="applyChannelDelayPreset(ch, 18005, 18040)" class="px-2 py-0.5 rounded bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 text-[11px] font-semibold transition">5 Jam</button>
+                                                <button type="button" @click="applyChannelDelayPreset(ch, 21605, 21645)" class="px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-semibold transition">6 Jam</button>
+                                            </div>
+                                        </div>
+                                        <textarea x-model="ch.message_content" @input.debounce.700ms="saveDraft()" rows="3"
+                                                  :placeholder="`Tulis pesan khusus untuk #${ch.name} di ${ch.guild_name || 'server ini'}...`"
+                                                  class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-teal-500 focus:bg-white transition"></textarea>
+                                    </div>
+
+                                    <!-- Delay & Auto-Delete Khusus Channel Ini -->
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                                        <div>
+                                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Min Delay (detik)</label>
+                                            <input type="number" min="15" x-model.number="ch.min_delay" @change="saveDraft()" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-teal-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Max Delay (detik)</label>
+                                            <input type="number" min="20" x-model.number="ch.max_delay" @change="saveDraft()" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-teal-500">
+                                        </div>
+                                        <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80">
+                                            <span class="text-xs font-bold text-slate-700">Auto-Delete</span>
+                                            <button type="button" @click="ch.auto_delete = !ch.auto_delete; saveDraft()" :class="ch.auto_delete ? 'bg-teal-600' : 'bg-slate-300'" class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors">
+                                                <span :class="ch.auto_delete ? 'translate-x-4' : 'translate-x-0'" class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tombol Start / Pause Terpisah Khusus Channel Ini -->
+                                    <div class="pt-2 border-t border-slate-100 flex items-center space-x-3">
+                                        <button type="button" @click="startSingleChannel(ch)"
+                                                :disabled="ch.status === 'Running'"
+                                                :class="ch.status === 'Running' ? 'opacity-50 cursor-not-allowed bg-teal-600' : 'bg-teal-600 hover:bg-teal-700'"
+                                                class="flex-1 py-2.5 px-4 rounded-xl text-white font-display font-bold text-xs flex items-center justify-center transition">
+                                            <span x-text="ch.status === 'Running' ? 'Sedang Berjalan...' : 'Start Channel Ini'"></span>
+                                        </button>
+                                        <button type="button" @click="stopSingleChannel(ch)"
+                                                :disabled="ch.status !== 'Running'"
+                                                :class="ch.status !== 'Running' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-rose-600 hover:text-white'"
+                                                class="py-2.5 px-5 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 font-display font-bold text-xs flex items-center justify-center transition">
+                                            Pause
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- LOGS -->
+                    <div class="lg:col-span-5">
+                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col h-[720px] sticky top-28">
+                            <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+                                <h3 class="font-display font-bold text-base text-slate-800">Live Delivery Feed</h3>
+                                <span x-show="selectedAccount && selectedAccount.worker_status === 'Running' && selectedAccount.remaining_seconds > 0"
+                                      class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200"
+                                      x-text="`Next: ${formatSeconds(selectedAccount?.remaining_seconds || 0)}`"></span>
+                            </div>
+                            <div class="flex-1 p-4 overflow-y-auto custom-scroll space-y-3 bg-slate-50/50">
+                                <template x-if="logs.length === 0">
+                                    <div class="flex flex-col items-center justify-center h-full text-slate-400 space-y-2 opacity-70">
+                                        <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                        <span class="text-xs font-semibold">Belum ada riwayat pengiriman</span>
+                                    </div>
+                                </template>
+                                
+                                <template x-for="(log, index) in logs" :key="index">
+                                    <div class="p-3.5 rounded-xl bg-white border border-slate-200/70 shadow-sm text-xs">
+                                        <div class="flex items-center justify-between">
+                                            <span class="font-bold uppercase tracking-wider" :class="{ 'text-emerald-700': log.type === 'SENT', 'text-amber-700': log.type === 'DELETED', 'text-blue-700': log.type === 'SLEEP', 'text-rose-700': log.type === 'ERROR' }" x-text="log.type"></span>
+                                            <span class="text-slate-400 font-mono" x-text="log.time"></span>
+                                        </div>
+                                        <p class="font-semibold text-slate-700 mt-1" x-text="log.channel"></p>
+                                        <p class="text-slate-500 mt-0.5" x-text="log.detail"></p>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: LIVE COOLDOWN MONITOR PER AKUN & CHANNEL -->
+                <div x-show="activeTab === 'logs'" x-cloak x-transition.opacity class="space-y-8">
+                    
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-xl font-bold text-slate-800">Live Cooldown (CD) Per Akun & Channel</h2>
+                            <span class="text-xs font-semibold text-slate-500">Update otomatis setiap detik</span>
+                        </div>
+
+                        <template x-if="accounts.length === 0">
+                            <div class="bg-white p-8 rounded-2xl border border-slate-200/80 text-center text-sm text-slate-400">
+                                Belum ada akun yang terhubung.
+                            </div>
+                        </template>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <template x-for="acc in accounts" :key="acc.id">
+                                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between space-y-5">
+                                    <!-- Header Akun -->
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center space-x-3 overflow-hidden">
+                                            <img :src="acc.avatar_url" class="w-11 h-11 rounded-full ring-2 ring-teal-500/30 shrink-0">
+                                            <div class="truncate">
+                                                <h3 class="font-display font-bold text-base text-slate-800 truncate" x-text="acc.username"></h3>
+                                                <p class="text-xs text-slate-400" x-text="`Terakhir kirim: ${acc.last_sent_time}`"></p>
+                                            </div>
+                                        </div>
+                                        <span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold shrink-0"
+                                              :class="acc.worker_status === 'Running' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'">
+                                            <span class="w-1.5 h-1.5 rounded-full" :class="acc.worker_status === 'Running' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
+                                            <span x-text="`${acc.running_count || 0}/${acc.targets_count} Aktif`"></span>
+                                        </span>
+                                    </div>
+
+                                    <!-- Daftar CD Masing-Masing Channel pada Akun Ini -->
+                                    <div class="space-y-2.5">
+                                        <template x-if="!acc.target_channels || acc.target_channels.length === 0">
+                                            <div class="p-4 rounded-xl bg-slate-50 text-center text-xs text-slate-400">
+                                                Belum ada target channel diatur.
+                                            </div>
+                                        </template>
+                                        <template x-for="ch in (acc.target_channels || [])" :key="ch.id">
+                                            <div class="p-3.5 rounded-xl bg-slate-900 text-white space-y-2">
+                                                <div class="flex items-center justify-between gap-2">
+                                                    <div class="truncate">
+                                                        <span class="text-[11px] font-bold text-teal-400 block truncate" x-text="ch.guild_name || 'Discord Server'"></span>
+                                                        <span class="text-xs font-bold text-white" x-text="`#${ch.name}`"></span>
+                                                    </div>
+                                                    <div class="text-right shrink-0">
+                                                        <span class="font-mono text-sm font-extrabold block"
+                                                              :class="ch.status === 'Running' ? (ch.remaining_seconds > 0 ? 'text-amber-400' : 'text-emerald-400') : 'text-slate-500'"
+                                                              x-text="ch.status === 'Running' ? (ch.remaining_seconds > 0 ? formatSeconds(ch.remaining_seconds) : 'Siap kirim') : 'Paused'"></span>
+                                                        <span x-show="ch.status === 'Running' && ch.next_run_time && ch.remaining_seconds > 0"
+                                                              class="text-[10px] text-slate-400 font-mono"
+                                                              x-text="`Jam ${ch.next_run_time}`"></span>
+                                                    </div>
+                                                </div>
+                                                <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                                    <div class="h-full bg-gradient-to-r from-teal-400 to-emerald-400 transition-all duration-1000"
+                                                         :style="`width: ${calcChannelCdPercent(ch)}%`"></div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    <!-- Tombol Cepat -->
+                                    <div class="pt-1 flex items-center space-x-2">
+                                        <button @click="configureAccount(acc)" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition">
+                                            Atur Pesan & CD
+                                        </button>
+                                        <button @click="filterLogAccountId = String(acc.id); fetchGlobalLogs()" class="py-2.5 px-4 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold text-xs transition">
+                                            Filter Log
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Tabel Global Activity Logs -->
+                    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                        <div class="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <h3 class="font-display font-bold text-lg text-slate-800">Riwayat Aktivitas Pengiriman</h3>
+                                <p class="text-xs text-slate-400">Menampilkan 50 aktivitas terbaru dari worker</p>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <select x-model="filterLogAccountId" @change="fetchGlobalLogs()" class="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-teal-500">
+                                    <option value="">Semua Akun</option>
+                                    <template x-for="acc in accounts" :key="acc.id">
+                                        <option :value="String(acc.id)" x-text="acc.username"></option>
+                                    </template>
+                                </select>
+                                <button @click="clearGlobalLogs()" class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold transition">
+                                    Clear Logs
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs text-slate-600">
+                                <thead class="text-[11px] text-slate-400 uppercase bg-slate-50/60 border-b border-slate-100">
+                                    <tr>
+                                        <th class="px-6 py-3.5 font-semibold">Waktu</th>
+                                        <th class="px-6 py-3.5 font-semibold">Akun</th>
+                                        <th class="px-6 py-3.5 font-semibold">Status</th>
+                                        <th class="px-6 py-3.5 font-semibold">Target</th>
+                                        <th class="px-6 py-3.5 font-semibold">Keterangan</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <template x-if="globalLogs.length === 0">
+                                        <tr><td colspan="5" class="px-6 py-10 text-center text-slate-400">Belum ada riwayat log tercatat.</td></tr>
+                                    </template>
+                                    <template x-for="item in globalLogs" :key="item.id">
+                                        <tr class="hover:bg-slate-50/70">
+                                            <td class="px-6 py-3.5 font-mono text-slate-500" x-text="item.time"></td>
+                                            <td class="px-6 py-3.5 font-bold text-slate-800" x-text="item.username"></td>
+                                            <td class="px-6 py-3.5">
+                                                <span class="px-2.5 py-0.5 rounded-full font-bold uppercase text-[10px]"
+                                                      :class="{
+                                                        'bg-emerald-100 text-emerald-700': item.type === 'SENT',
+                                                        'bg-amber-100 text-amber-700': item.type === 'DELETED',
+                                                        'bg-blue-100 text-blue-700': item.type === 'SLEEP',
+                                                        'bg-rose-100 text-rose-700': item.type === 'ERROR'
+                                                      }"
+                                                      x-text="item.type"></span>
+                                            </td>
+                                            <td class="px-6 py-3.5 font-semibold text-slate-700" x-text="item.channel"></td>
+                                            <td class="px-6 py-3.5 text-slate-500" x-text="item.detail"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- AUTH MODAL -->
+    <div x-show="authModalOpen" x-cloak x-transition.opacity class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div @click.away="closeAuthModal()" class="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl border border-slate-100">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="font-display font-extrabold text-xl text-slate-800">Connect Account</h2>
+                <button @click="closeAuthModal()" class="text-slate-400 hover:text-slate-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            
+            <div class="flex border-b border-slate-200 mb-6">
+                <button class="flex-1 pb-3 text-sm font-bold border-b-2 border-teal-500 text-teal-600 transition">Manual Token</button>
+            </div>
+
+            <div class="space-y-4">
+                <p class="text-xs text-slate-500 mb-2">Paste token Discord Anda. Token dienkripsi AES-128 di database.</p>
+                <div>
+                    <input type="password" x-model="manualToken" placeholder="Paste token..." class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-teal-500 transition">
+                </div>
+                <p x-show="tokenError" class="text-xs text-rose-500 font-semibold" x-text="tokenError"></p>
+                <button @click="connectManual()" :disabled="isConnecting" :class="isConnecting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-teal-700'" class="w-full py-3 px-4 rounded-xl bg-teal-600 text-white font-semibold text-sm shadow-lg shadow-teal-500/20 flex items-center justify-center transition">
+                    <span x-text="isConnecting ? 'Validating...' : 'Connect via Token'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ALPINE.JS STATE -->
+    <script>
+        function dashboardApp() {
+            return {
+                activeTab: 'dashboard',
+                maxTargets: 5,
+                
+                accounts: [],
+                selectedAccount: null,
+
+                isFetchingGuilds: false,
+                isFetchingChannels: false,
+                guildDropdownOpen: false,
+                guildSearch: '',
+                channelSearch: '',
+                selectedGuild: null,
+                guilds: [],
+                channels: [],
+                
+                manualChannelId: '',
+                isAddingChannel: false,
+                
+                config: { channels: [], message_content: '', min_delay: 1800, max_delay: 1830, auto_delete: true, status: 'Paused' },
+                logs: [],
+                globalLogs: [],
+                filterLogAccountId: '',
+                
+                authModalOpen: false,
+                manualToken: '',
+                tokenError: '',
+                isConnecting: false,
+
+                initApp() {
+                    this.fetchAccounts();
+
+                    // Countdown real-time setiap 1 detik
+                    setInterval(() => {
+                        this.accounts.forEach(acc => {
+                            if (acc.remaining_seconds > 0) acc.remaining_seconds -= 1;
+                            (acc.target_channels || []).forEach(ch => {
+                                if (ch.status === 'Running' && ch.remaining_seconds > 0) ch.remaining_seconds -= 1;
+                            });
+                        });
+                        (this.config.channels || []).forEach(ch => {
+                            if (ch.status === 'Running' && ch.remaining_seconds > 0) ch.remaining_seconds -= 1;
+                        });
+                    }, 1000);
+
+                    // Sinkronisasi data dari backend setiap 4 detik
+                    setInterval(() => {
+                        this.fetchAccounts();
+                        if (this.activeTab === 'autosender' && this.selectedAccount) {
+                            this.loadSchedule(this.selectedAccount.id, true);
+                        } else if (this.activeTab === 'logs') {
+                            this.fetchGlobalLogs();
+                        }
+                    }, 4000);
+                },
+
+                runningChannelsCount() {
+                    return (this.config.channels || []).filter(c => c.status === 'Running').length;
+                },
+
+                formatSeconds(totalSec) {
+                    const s = Math.max(0, Math.floor(totalSec || 0));
+                    const hrs = Math.floor(s / 3600);
+                    const mins = Math.floor((s % 3600) / 60);
+                    const secs = s % 60;
+                    const pad = (n) => String(n).padStart(2, '0');
+                    return `${pad(hrs)}j ${pad(mins)}m ${pad(secs)}d`;
+                },
+
+                formatAccountCD(acc) {
+                    if (!acc || acc.worker_status !== 'Running') return 'Paused';
+                    if (acc.remaining_seconds > 0) return this.formatSeconds(acc.remaining_seconds);
+                    return 'Siap / Mengirim...';
+                },
+
+                calcChannelCdPercent(ch) {
+                    if (!ch || ch.status !== 'Running' || !ch.max_delay) return 0;
+                    if (ch.remaining_seconds <= 0) return 100;
+                    const elapsed = Math.max(0, ch.max_delay - ch.remaining_seconds);
+                    return Math.min(100, Math.round((elapsed / ch.max_delay) * 100));
+                },
+
+                async fetchAccounts() {
+                    try {
+                        const res = await fetch('/api/accounts');
+                        if (res.ok) {
+                            this.accounts = await res.json();
+                            if (this.selectedAccount) {
+                                const updated = this.accounts.find(a => a.id === this.selectedAccount.id);
+                                if (updated) this.selectedAccount = updated;
+                            }
+                        }
+                    } catch (e) {}
+                },
+
+                openAuthModal() {
+                    this.authModalOpen = true;
+                    this.manualToken = '';
+                    this.tokenError = '';
+                },
+                closeAuthModal() { this.authModalOpen = false; },
+
+                async connectManual() {
+                    if (!this.manualToken) { this.tokenError = 'Token tidak boleh kosong!'; return; }
+                    this.isConnecting = true;
+                    try {
+                        const res = await fetch('/api/accounts/connect/manual', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: this.manualToken })
+                        });
+                        if (res.ok) {
+                            this.closeAuthModal();
+                            await this.fetchAccounts(); 
+                        } else {
+                            this.tokenError = 'Gagal: Token Invalid atau Expired.';
+                        }
+                    } finally {
+                        this.isConnecting = false;
+                    }
+                },
+
+                async deleteAccount(id) {
+                    if(confirm("Yakin ingin menghapus akun ini beserta jadwalnya?")) {
+                        await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
+                        if (this.selectedAccount && this.selectedAccount.id === id) {
+                            this.selectedAccount = null;
+                            this.activeTab = 'dashboard';
+                        }
+                        this.fetchAccounts();
+                    }
+                },
+
+                async configureAccount(acc) {
+                    this.selectedAccount = acc;
+                    this.guilds = []; this.channels = []; this.selectedGuild = null;
+                    await this.loadSchedule(acc.id);
+                    this.activeTab = 'autosender';
+                    this.fetchGuilds(acc.id);
+                },
+
+                openAutoSender() {
+                    if (this.selectedAccount) {
+                        this.activeTab = 'autosender';
+                        this.loadSchedule(this.selectedAccount.id);
+                    }
+                },
+
+                async openLogsTab() {
+                    this.activeTab = 'logs';
+                    await this.fetchAccounts();
+                    await this.fetchGlobalLogs();
+                },
+
+                async fetchGlobalLogs() {
+                    try {
+                        const url = this.filterLogAccountId
+                            ? `/api/logs?account_id=${encodeURIComponent(this.filterLogAccountId)}`
+                            : '/api/logs';
+                        const res = await fetch(url);
+                        if (res.ok) this.globalLogs = await res.json();
+                    } catch (e) {}
+                },
+
+                async clearGlobalLogs() {
+                    if (!confirm('Hapus semua riwayat log yang tampil?')) return;
+                    const url = this.filterLogAccountId
+                        ? `/api/logs?account_id=${encodeURIComponent(this.filterLogAccountId)}`
+                        : '/api/logs';
+                    await fetch(url, { method: 'DELETE' });
+                    await this.fetchGlobalLogs();
+                },
+
+                async loadSchedule(accId, silent = false) {
+                    try {
+                        const res = await fetch(`/api/automation/${accId}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (!silent) {
+                                this.config = {
+                                    channels: data.config.channels || [],
+                                    message_content: data.config.message_content || '',
+                                    min_delay: data.config.min_delay || 1800,
+                                    max_delay: data.config.max_delay || 1830,
+                                    auto_delete: data.config.auto_delete,
+                                    status: data.config.status || 'Paused'
+                                };
+                            } else {
+                                this.config.status = data.config.status || 'Paused';
+                                const stateMap = {};
+                                (data.config.channels || []).forEach(c => { stateMap[c.id] = c; });
+                                (this.config.channels || []).forEach(c => {
+                                    if (stateMap[c.id]) {
+                                        c.status = stateMap[c.id].status;
+                                        c.remaining_seconds = stateMap[c.id].remaining_seconds;
+                                        c.next_run_time = stateMap[c.id].next_run_time;
+                                    }
+                                });
+                            }
+                            this.logs = data.logs || [];
+                        }
+                    } catch (e) {}
+                },
+
+                async applyChannelDelayPreset(ch, minSec, maxSec) {
+                    ch.min_delay = minSec;
+                    ch.max_delay = maxSec;
+                    await this.saveDraft();
+                },
+
+                filteredGuilds() {
+                    if (!this.guildSearch) return this.guilds;
+                    const q = this.guildSearch.toLowerCase();
+                    return this.guilds.filter(g => g.name.toLowerCase().includes(q) || g.id.includes(q));
+                },
+
+                filteredChannels() {
+                    if (!this.channelSearch) return this.channels;
+                    const q = this.channelSearch.toLowerCase();
+                    return this.channels.filter(c => c.name.toLowerCase().includes(q) || c.id.includes(q));
+                },
+
+                async fetchGuilds(accId) {
+                    this.isFetchingGuilds = true;
+                    try {
+                        const res = await fetch(`/api/discord/${accId}/guilds`);
+                        if (res.ok) this.guilds = await res.json();
+                    } finally { setTimeout(() => { this.isFetchingGuilds = false; }, 300); }
+                },
+
+                async selectGuild(guild) {
+                    this.selectedGuild = guild;
+                    this.guildDropdownOpen = false;
+                    this.guildSearch = '';
+                    await this.fetchChannelsForGuild(guild.id, guild.name);
+                },
+
+                async fetchChannelsForGuild(guildId, guildName = '') {
+                    this.isFetchingChannels = true;
+                    this.channels = [];
+                    try {
+                        const url = `/api/discord/${this.selectedAccount.id}/guilds/${guildId}/channels?guild_name=${encodeURIComponent(guildName)}`;
+                        const res = await fetch(url);
+                        if (res.ok) this.channels = await res.json();
+                    } finally { this.isFetchingChannels = false; }
+                },
+
+                isChannelSelected(id) { return this.config.channels.some(c => c.id === id); },
+                
+                _buildChannelItem(ch) {
+                    return {
+                        id: ch.id,
+                        name: ch.name,
+                        guild_name: ch.guild_name || (this.selectedGuild ? this.selectedGuild.name : 'Discord Server'),
+                        message_content: '',
+                        min_delay: 1800,
+                        max_delay: 1830,
+                        auto_delete: true,
+                        status: 'Paused',
+                        remaining_seconds: 0,
+                        next_run_time: null
+                    };
+                },
+
+                async toggleChannel(ch) {
+                    if (this.isChannelSelected(ch.id)) {
+                        this.config.channels = this.config.channels.filter(c => c.id !== ch.id);
+                    } else if (this.config.channels.length < this.maxTargets) {
+                        this.config.channels.push(this._buildChannelItem(ch));
+                    }
+                    await this.saveDraft();
+                },
+
+                async addManualChannel() {
+                    const cleanId = this.manualChannelId.trim();
+                    if (!cleanId || this.isChannelSelected(cleanId)) return;
+                    if (this.config.channels.length >= this.maxTargets) { alert(`Maksimal ${this.maxTargets} target channel.`); return; }
+                    
+                    this.isAddingChannel = true;
+                    try {
+                        const gName = this.selectedGuild ? this.selectedGuild.name : 'Custom Target';
+                        const res = await fetch(`/api/discord/${this.selectedAccount.id}/channels/${encodeURIComponent(cleanId)}?guild_name=${encodeURIComponent(gName)}`);
+                        if (res.ok) {
+                            const ch = await res.json();
+                            if (!this.channels.some(c => c.id === ch.id)) this.channels.push(ch);
+                            this.config.channels.push(this._buildChannelItem(ch));
+                            this.manualChannelId = '';
+                            await this.saveDraft();
+                        } else { alert('Channel ID tidak valid.'); }
+                    } finally { this.isAddingChannel = false; }
+                },
+
+                async saveDraft() {
+                    if (!this.selectedAccount) return;
+                    try {
+                        await fetch(`/api/automation/${this.selectedAccount.id}/save`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                channels: this.config.channels,
+                                message_content: this.config.message_content,
+                                min_delay: this.config.min_delay,
+                                max_delay: this.config.max_delay,
+                                auto_delete: this.config.auto_delete
+                            })
+                        });
+                    } catch (e) {}
+                },
+
+                async startSingleChannel(ch) {
+                    if (!(ch.message_content || '').trim()) {
+                        alert(`Isi pesan untuk #${ch.name} masih kosong!`);
+                        return;
+                    }
+                    ch.status = 'Running';
+                    await this.saveDraft();
+                    await fetch(`/api/automation/${this.selectedAccount.id}/channels/${encodeURIComponent(ch.id)}/start`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message_content: ch.message_content,
+                            min_delay: ch.min_delay,
+                            max_delay: ch.max_delay,
+                            auto_delete: ch.auto_delete
+                        })
+                    });
+                    await this.fetchAccounts();
+                    await this.loadSchedule(this.selectedAccount.id);
+                },
+
+                async stopSingleChannel(ch) {
+                    ch.status = 'Paused';
+                    ch.remaining_seconds = 0;
+                    await fetch(`/api/automation/${this.selectedAccount.id}/channels/${encodeURIComponent(ch.id)}/stop`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message_content: ch.message_content,
+                            min_delay: ch.min_delay,
+                            max_delay: ch.max_delay,
+                            auto_delete: ch.auto_delete
+                        })
+                    });
+                    await this.fetchAccounts();
+                    await this.loadSchedule(this.selectedAccount.id);
+                },
+
+                async stopAllChannels() {
+                    (this.config.channels || []).forEach(c => {
+                        c.status = 'Paused';
+                        c.remaining_seconds = 0;
+                    });
+                    await fetch(`/api/automation/${this.selectedAccount.id}/stop-all`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            channels: this.config.channels,
+                            message_content: this.config.message_content,
+                            min_delay: this.config.min_delay,
+                            max_delay: this.config.max_delay,
+                            auto_delete: this.config.auto_delete
+                        })
+                    });
+                    await this.fetchAccounts();
+                    await this.loadSchedule(this.selectedAccount.id);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
